@@ -64,7 +64,7 @@ class FaceDetector:
             return None
 
         # Get aligned 112×112 crop directly from InsightFace
-        aligned = best.normed_crop    # <-- correct aligned crop
+        aligned = self._extract_aligned_face(img_bgr, best)   # <-- correct aligned crop
 
         # Original face crop
         orig_crop = self._extract_bbox_crop(img_bgr, best.bbox)
@@ -86,6 +86,36 @@ class FaceDetector:
         x2 = min(img.shape[1], x2)
         y2 = min(img.shape[0], y2)
         return img[y1:y2, x1:x2].copy()
+    # -----------------------------------
+
+    def _extract_aligned_face(self, img, face_obj):
+        """
+        Reconstruct a proper 112x112 ArcFace-aligned face
+        using 5-point alignment derived from InsightFace 106 landmarks.
+        """
+
+        # 5 key landmarks from the 106 set
+        lm5 = face_obj.landmark_2d_106[
+            [33, 46, 60, 72, 76], :
+        ].astype(np.float32)
+
+        # ArcFace's fixed 5 reference points
+        ref5 = np.array([
+            [38.2946, 51.6963],
+            [73.5318, 51.5014],
+            [56.0252, 71.7366],
+            [41.5493, 92.3655],
+            [70.7299, 92.2041],
+        ], dtype=np.float32)
+
+        # Compute affine transform
+        M, _ = cv2.estimateAffinePartial2D(lm5, ref5, method=cv2.LMEDS)
+
+        # Warp to 112×112
+        aligned = cv2.warpAffine(img, M, (112, 112), borderValue=0)
+
+        return aligned
+
 
 
 # ============================
