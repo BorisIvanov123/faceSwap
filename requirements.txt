@@ -9,10 +9,6 @@ insightface==0.7.1
 onnxruntime-gpu==1.17.1
 onnx==1.14.0
 
-# ---- Torch (CUDA 11.8 compatible with RunPod) ----
-torch==2.1.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
-torchvision==0.16.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
-
 # ---- Face parsing dependencies ----
 scikit-image==0.22.0
 tqdm==4.66.1
