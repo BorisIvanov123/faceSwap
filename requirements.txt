@@ -1,0 +1,23 @@
+# ---- CORE ----
+numpy==1.26.4
+opencv-python==4.7.0.72
+Pillow==10.0.1
+scipy==1.11.4
+
+# ---- ONNX + InsightFace ----
+insightface==0.7.1
+onnxruntime-gpu==1.17.1
+onnx==1.14.0
+
+# ---- Torch (CUDA 11.8 compatible with RunPod) ----
+torch==2.1.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+torchvision==0.16.0+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+
+# ---- Face parsing dependencies ----
+scikit-image==0.22.0
+tqdm==4.66.1
+
+# ---- Utility ----
+prettytable==3.8.0
+requests==2.31.0
+easydict==1.10
