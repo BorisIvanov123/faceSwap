@@ -23,9 +23,10 @@ class FaceParsingResult:
 class FaceParser:
     def __init__(self, ctx_id=-1):
         """
-        ctx_id = -1 → CPU
-        ctx_id = 0  → GPU
-        Uses InsightFace's built-in parsing model.
+        ctx_id:
+          -1 = CPU
+           0 = GPU
+        Loads InsightFace's built-in ONNX BiseNet parsing model.
         """
         self.app = FaceAnalysis(
             name="parsing_bisenet",
@@ -37,14 +38,16 @@ class FaceParser:
         if img_bgr is None:
             return None
 
-        h, w = img_bgr.shape[:2]
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-        # InsightFace returns segmentation in original resolution
-        parsing = self.app.get_parsing(img_rgb)  # (H, W) int labels
-        seg = parsing.astype(np.uint8)
+        # InsightFace parser returns:
+        #   [{'parsing': np.ndarray(H, W), ...}]
+        out = self.app.get(img_rgb)
+        if not out or "parsing" not in out[0]:
+            return None
 
-        # Build masks
+        seg = out[0]["parsing"].astype(np.uint8)
+
         masks = self._make_masks(seg)
 
         return FaceParsingResult(
