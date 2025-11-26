@@ -7,11 +7,10 @@ Consumes:
   - FaceParsingResult (from face_parsing.py)
 
 Produces:
-  - Hair color (as RGB, HEX, and human-readable string)
+  - Hair color (RGB + HEX + shade)
   - Skin tone (light / medium / dark)
-  - Eye color (rough classification)
-  - Hair shade (light/medium/dark)
-  - Optional: hair length estimate
+  - Eye color (coarse classification)
+  - Meta statistics (pixel counts)
 
 Used by:
   - prompt_builder.py
@@ -22,45 +21,45 @@ import numpy as np
 from dataclasses import dataclass
 
 
-# ----------------------------
+# ============================
 # DATA CLASS
-# ----------------------------
+# ============================
 
 @dataclass
 class AppearanceResult:
-    hair_color_rgb: tuple  # (r, g, b)
-    hair_color_hex: str  # "#xxxxxx"
-    hair_shade: str  # "light" / "medium" / "dark"
+    hair_color_rgb: tuple        # (r, g, b)
+    hair_color_hex: str          # "#RRGGBB"
+    hair_shade: str              # "light" | "medium" | "dark"
 
     skin_color_rgb: tuple
-    skin_tone: str  # "light" / "medium" / "dark"
+    skin_tone: str               # "light" | "medium" | "dark"
 
     eye_color_rgb: tuple
-    eye_color_name: str  # "brown", "blue", etc.
+    eye_color_name: str          # "brown" | "blue" | "green" | "hazel"
 
-    meta: dict  # extra fields
+    meta: dict                   # misc stats (pixel counts etc.)
 
 
-# ----------------------------
-# HELPER FUNCTIONS
-# ----------------------------
+# ============================
+# HELPERS
+# ============================
 
 def rgb_to_hex(rgb):
     r, g, b = rgb
-    return "#{:02x}{:02x}{:02x}".format(int(r), int(g), int(b)).upper()
+    return "#{:02X}{:02X}{:02X}".format(int(r), int(g), int(b))
 
 
 def classify_shade(rgb):
     """
-    Light vs medium vs dark hair or skin.
-    Based on luminance.
+    Classify luminance into light / medium / dark.
+    Works well for both hair & skin.
     """
     r, g, b = rgb
-    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
 
-    if luminance > 180:
+    if lum > 180:
         return "light"
-    elif luminance > 80:
+    elif lum > 80:
         return "medium"
     else:
         return "dark"
@@ -68,60 +67,64 @@ def classify_shade(rgb):
 
 def closest_eye_color(rgb):
     """
-    Quick & reliable eye color heuristic:
-      - Brown (default)
-      - Blue
-      - Green
-      - Hazel
+    Light-weight, stable eye color estimator.
+    Priority-based classification.
     """
     r, g, b = rgb
 
-    if r > 80 and g > 60 and b < 50:
+    # hazel: warm but not fully brown
+    if r > 90 and g > 70 and b < 60:
         return "hazel"
 
+    # blue-ish (strong blue component)
     if b > 100 and g > 80:
         return "blue"
 
+    # green-ish (balanced green & blue)
     if g > 100 and b > 60:
         return "green"
 
-    return "brown"  # strongest prior
+    # fallback
+    return "brown"
 
 
-# ----------------------------
+# ============================
 # MAIN CLASS
-# ----------------------------
+# ============================
 
 class AppearanceExtractor:
 
     def __init__(self):
         pass
 
-    # ----------------------------------------------------
+    # ---------------------------------------------
+
     def extract(self, parsing_result) -> AppearanceResult:
-        img = parsing_result.processed_img
-        seg_mask = parsing_result.seg_map
+        """
+        Main entry point:
+        parsing_result must include:
+            - processed_img  (RGB image)
+            - hair_mask
+            - skin_mask
+            - eye_mask
+        """
 
-        # Extract hair / skin / eye regions
-        hair_rgb = self._extract_color(img, parsing_result.hair_mask)
-        skin_rgb = self._extract_color(img, parsing_result.skin_mask)
-        eye_rgb = self._extract_color(img, parsing_result.eye_mask)
+        img_rgb = parsing_result.processed_img
 
-        # Classify attributes
-        hair_shade = classify_shade(hair_rgb)
-        skin_tone = classify_shade(skin_rgb)
-        eye_color_name = closest_eye_color(eye_rgb)
+        hair_rgb = self._extract_color(img_rgb, parsing_result.hair_mask)
+        skin_rgb = self._extract_color(img_rgb, parsing_result.skin_mask)
+        eye_rgb  = self._extract_color(img_rgb, parsing_result.eye_mask)
 
         return AppearanceResult(
             hair_color_rgb=hair_rgb,
             hair_color_hex=rgb_to_hex(hair_rgb),
-            hair_shade=hair_shade,
+            hair_shade=classify_shade(hair_rgb),
 
             skin_color_rgb=skin_rgb,
-            skin_tone=skin_tone,
+            skin_tone=classify_shade(skin_rgb),
 
             eye_color_rgb=eye_rgb,
-            eye_color_name=eye_color_name,
+            eye_color_name=closest_eye_color(eye_rgb),
 
             meta={
                 "hair_pixel_count": int((parsing_result.hair_mask > 0).sum()),
@@ -130,20 +133,24 @@ class AppearanceExtractor:
             }
         )
 
-    # ----------------------------------------------------
+    # ---------------------------------------------
+
     def _extract_color(self, img_rgb, mask):
         """
-        Extract dominant color from masked region.
-        Returns RGB tuple.
+        Extracts the mean RGB value inside a segmentation mask.
+        If mask has too few pixels → fallback to global image mean.
         """
+
         ys, xs = np.where(mask > 0)
 
-        if len(xs) < 10:  # too few pixels → fallback average of whole image
+        # fallback if mask is empty or nearly empty
+        if len(xs) < 10:
             mean = img_rgb.mean(axis=(0, 1))
-            return tuple(map(int, mean[::-1]))  # BGR → RGB
+            r, g, b = mean
+            return (int(r), int(g), int(b))
 
-        # Get all masked pixels
         pixels = img_rgb[ys, xs]
-        mean_bgr = pixels.mean(axis=0).astype(np.uint8)
-        r, g, b = int(mean_bgr[2]), int(mean_bgr[1]), int(mean_bgr[0])
-        return (r, g, b)
+        mean_rgb = pixels.mean(axis=0)
+
+        r, g, b = mean_rgb
+        return (int(r), int(g), int(b))

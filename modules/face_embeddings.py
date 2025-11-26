@@ -1,20 +1,14 @@
 """
 face_embedding.py
 -------------------
-Compute identity embeddings with ArcFace (InsightFace).
+Compute identity embeddings using ArcFace (InsightFace).
 
 Consumes:
-  - aligned face from face_detection.FaceDetectionResult
-    (aligned_face = 112x112 ArcFace-ready image)
+  - aligned_face (112x112 RGB/BGR) from FaceDetectionResult
 
 Produces:
-  - 512-d identity embedding (L2-normalized)
-  - Used by IP-Adapter FaceID, identity consistency checks,
-    and throughout the entire pipeline.
-
-Notes:
-  - MUST be stable across slightly different crops/poses
-  - MUST be normalized for cosine similarity
+  - 512-D L2-normalized embedding
+  - Stable identity vector used in all downstream tasks
 """
 
 import numpy as np
@@ -23,86 +17,85 @@ from insightface.model_zoo import get_model
 from dataclasses import dataclass
 
 
-# ----------------------------
+# ============================
 # DATA STRUCTURE
-# ----------------------------
+# ============================
 
 @dataclass
 class FaceEmbeddingResult:
-    embedding: np.ndarray   # shape (512,)
-    norm: float             # should be ~1.0
-    raw_face: np.ndarray    # original aligned face (112x112)
+    embedding: np.ndarray      # (512,) float32
+    norm: float                # L2 norm (should be ~1.0)
+    raw_face: np.ndarray       # input face crop (112x112 BGR)
 
 
-# ----------------------------
-# MAIN CLASS
-# ----------------------------
+# ============================
+# EMBEDDING CLASS
+# ============================
 
 class FaceEmbedder:
-    def __init__(self, model_path=None, ctx_id=-1):
+    def __init__(self, model_name="arcface_r100_v1", ctx_id=-1):
         """
         Initialize ArcFace model.
 
-        Params:
-          model_path (str): custom model file, else loads default ArcFace
-          ctx_id: -1 = CPU, 0 = GPU 0
+        ctx_id:
+          - -1 → CPU
+          - 0 → GPU 0
         """
-        if model_path:
-            self.model = get_model(model_path, root='.')
-        else:
-            # Default ArcFace 512d model
-            self.model = get_model('arcface_r100_v1', root='.')
-
+        # Load ArcFace model directly from InsightFace
+        self.model = get_model(model_name)
         self.model.prepare(ctx_id=ctx_id)
 
-    # ------------------------------------------------------
-    def compute_embedding(self, aligned_face_bgr) -> FaceEmbeddingResult:
+    # ---------------------------------------------
+
+    def compute_embedding(self, aligned_face_bgr: np.ndarray) -> FaceEmbeddingResult:
         """
-        Compute a single face embedding.
-        Input must be a 112x112 aligned face.
+        Compute a stable 512-D identity embedding.
+        Input: aligned BGR face (112x112)
         """
+
         if aligned_face_bgr is None:
             raise ValueError("aligned_face_bgr is None")
 
-        # InsightFace ArcFace model expects RGB input
+        # Convert to RGB (ArcFace expects RGB)
         face_rgb = cv2.cvtColor(aligned_face_bgr, cv2.COLOR_BGR2RGB)
 
-        # Input must be exactly 112x112
+        # Ensure correct size
         if face_rgb.shape[:2] != (112, 112):
             face_rgb = cv2.resize(face_rgb, (112, 112))
 
         # Compute embedding
-        emb = self.model.get_embedding(face_rgb).flatten()  # shape (512,)
+        emb = self.model.get_embedding(face_rgb).flatten()
 
-        # Normalize for cosine similarity
-        norm = np.linalg.norm(emb)
+        # L2-norm
+        norm = float(np.linalg.norm(emb))
         if norm == 0:
-            raise ValueError("ArcFace embedding norm is zero. Bad input?")
+            raise RuntimeError("Invalid embedding norm (0). Check input.")
 
-        emb_normalized = emb / norm
+        emb = emb / norm
 
         return FaceEmbeddingResult(
-            embedding=emb_normalized.astype(np.float32),
-            norm=float(norm),
-            raw_face=aligned_face_bgr
+            embedding=emb.astype(np.float32),
+            norm=norm,
+            raw_face=aligned_face_bgr,
         )
 
-    # ------------------------------------------------------
-    def compare(self, emb1, emb2):
+    # ---------------------------------------------
+
+    def compare(self, emb1: np.ndarray, emb2: np.ndarray) -> float:
         """
-        Cosine similarity between two embeddings.
+        Cosine similarity of two identity vectors.
         """
         return float(np.dot(emb1, emb2))
 
 
-# ----------------------------
-# DEMO / DEBUG
-# ----------------------------
+# ============================
+# DEBUG / STANDALONE RUN
+# ============================
 
 if __name__ == "__main__":
     from face_detection import FaceDetector, load_image
 
-    TEST_IMG = "../photos/faces/animated_test.jpeg"
+    TEST_IMG = "../photos/faces/test.jpg"
 
     img = load_image(TEST_IMG)
 
@@ -111,14 +104,14 @@ if __name__ == "__main__":
     det = detector.detect_faces(img)
 
     if det is None:
-        print("❌ No face detected, aborting")
+        print("❌ No face detected")
         exit()
 
     # Embed
     embedder = FaceEmbedder(ctx_id=-1)
     result = embedder.compute_embedding(det.aligned_face)
 
-    print("✔ Embedding computed!")
+    print("✔ Embedding computed")
     print("Shape:", result.embedding.shape)
     print("Norm:", result.norm)
-    print("Sample values:", result.embedding[:5])
+    print("First 10 values:", result.embedding[:10])
