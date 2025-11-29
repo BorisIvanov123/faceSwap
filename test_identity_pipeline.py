@@ -6,7 +6,7 @@ Runs the full identity processing pipeline:
   1. Face detection
   2. Landmark extraction
   3. ArcFace embedding
-  4. Face parsing (buffalo_l built-in parsing head)
+  4. Face parsing (BiSeNet ONNX)
   5. Appearance extraction
 
 Outputs:
@@ -23,7 +23,7 @@ import cv2
 from modules.face_detection import FaceDetector, load_image
 from modules.face_landmarks import FaceLandmarkProcessor
 from modules.face_embeddings import FaceEmbedder
-from modules.face_parsing import FaceParser   # <-- updated parser
+from modules.face_parsing import FaceParser
 from modules.appearance_extraction import AppearanceExtractor
 
 
@@ -51,7 +51,7 @@ print(f"Loaded: {IMG_PATH}, shape={img.shape}")
 # -------------------------------------------------
 
 print("\n=== Face Detection ===")
-detector = FaceDetector(ctx_id=0)     # GPU = 0, CPU = -1
+detector = FaceDetector(ctx_id=0)
 det = detector.detect_faces(img)
 
 if det is None:
@@ -60,7 +60,6 @@ if det is None:
 print("✔ Face detected")
 print("Score:", det.detection_score)
 
-# Save crops
 cv2.imwrite(f"{OUT_DIR}/aligned_face.png", det.aligned_face)
 cv2.imwrite(f"{OUT_DIR}/original_face.png", det.original_face)
 print("Saved face crops.")
@@ -83,7 +82,7 @@ print("Roll angle:", lm.roll_angle)
 # -------------------------------------------------
 
 print("\n=== ArcFace Embedding ===")
-embedder = FaceEmbedder(ctx_id=0)  # GPU for ArcFace
+embedder = FaceEmbedder(ctx_id=0)
 emb = embedder.compute_embedding(det.aligned_face)
 
 print("Embedding shape:", emb.embedding.shape)
@@ -92,11 +91,11 @@ print("Embedding sample:", emb.embedding[:5])
 
 
 # -------------------------------------------------
-# 4. FACE PARSING (buffalo_l parsing head)
+# 4. FACE PARSING (BiSeNet ONNX)
 # -------------------------------------------------
 
 print("\n=== Face Parsing ===")
-parser = FaceParser(ctx_id=0)  # uses buffalo_l, no downloads
+parser = FaceParser(model_path="weights/resnet18.onnx", ctx_id=0)
 parse = parser.parse(det.original_face)
 
 if parse is None:
