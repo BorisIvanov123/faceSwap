@@ -1,6 +1,9 @@
-cd /workspace/faceSwap
-python3.10 -m venv venv
+python3 -m venv venv
 source venv/bin/activate
+pip install --upgrade pip wheel setuptools
+
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
 
 
 
@@ -240,7 +243,6 @@ Scaling to multiple GPUs
 22. config.py
 
 Paths, global settings, model config.
-
 
 1. mask_generator.py (critical for inpainting)
 2. identity_profile.py (combines detection + appearance + embedding)

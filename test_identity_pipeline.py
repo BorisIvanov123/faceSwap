@@ -51,7 +51,7 @@ print(f"Loaded: {IMG_PATH}, shape={img.shape}")
 # -------------------------------------------------
 
 print("\n=== Face Detection ===")
-detector = FaceDetector(ctx_id=-1)     # CPU for now; switch to 0 for GPU
+detector = FaceDetector(ctx_id=0)     # GPU = 0, CPU = -1
 det = detector.detect_faces(img)
 
 if det is None:
@@ -60,7 +60,7 @@ if det is None:
 print("✔ Face detected")
 print("Score:", det.detection_score)
 
-# save crops
+# Save crops
 cv2.imwrite(f"{OUT_DIR}/aligned_face.png", det.aligned_face)
 cv2.imwrite(f"{OUT_DIR}/original_face.png", det.original_face)
 print("Saved face crops.")
@@ -83,7 +83,7 @@ print("Roll angle:", lm.roll_angle)
 # -------------------------------------------------
 
 print("\n=== ArcFace Embedding ===")
-embedder = FaceEmbedder(ctx_id=-1)
+embedder = FaceEmbedder(ctx_id=0)  # GPU for ArcFace
 emb = embedder.compute_embedding(det.aligned_face)
 
 print("Embedding shape:", emb.embedding.shape)
@@ -96,8 +96,11 @@ print("Embedding sample:", emb.embedding[:5])
 # -------------------------------------------------
 
 print("\n=== Face Parsing ===")
-parser = FaceParser(device="cpu")   # switch to "cuda" if your BiSeNet weights support GPU
+parser = FaceParser(ctx_id=0)  # GPU BiSeNet
 parse = parser.parse(det.original_face)
+
+if parse is None:
+    raise RuntimeError("Parsing failed — segmentation returned None")
 
 print("Segmentation map shape:", parse.seg_map.shape)
 

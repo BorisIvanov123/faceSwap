@@ -21,18 +21,29 @@ class FaceParsingResult:
 
 
 class FaceParser:
-    def __init__(self, ctx_id=-1):
+    def __init__(self, ctx_id=0):
         """
         ctx_id:
           -1 = CPU
-           0 = GPU
+           0 = GPU (CUDAExecutionProvider)
         Loads InsightFace's built-in ONNX BiseNet parsing model.
+
+        NOTE: We enable both CUDAExecutionProvider and CPUExecutionProvider.
+              If CUDA is unavailable, ORT automatically falls back to CPU.
         """
+
         self.app = FaceAnalysis(
             name="parsing_bisenet",
-            providers=["CPUExecutionProvider"]
+            providers=[
+                "CUDAExecutionProvider",       # GPU
+                "CPUExecutionProvider"         # fallback
+            ]
         )
+
+        # Prepare the model with the chosen context
         self.app.prepare(ctx_id=ctx_id)
+
+    # -------------------------------------------------------------
 
     def parse(self, img_bgr):
         if img_bgr is None:
@@ -56,6 +67,8 @@ class FaceParser:
             **masks
         )
 
+    # -------------------------------------------------------------
+
     def _make_masks(self, seg):
         hair_mask  = (seg == 17).astype(np.uint8) * 255
         skin_mask  = (seg == 1).astype(np.uint8) * 255
@@ -70,6 +83,8 @@ class FaceParser:
             mouth_mask=mouth_mask,
             face_mask=face_mask
         )
+
+    # -------------------------------------------------------------
 
     def visualize_masks(self, result: FaceParsingResult):
         img_bgr = cv2.cvtColor(result.processed_img, cv2.COLOR_RGB2BGR)
