@@ -6,7 +6,7 @@ Runs the full identity processing pipeline:
   1. Face detection
   2. Landmark extraction
   3. ArcFace embedding
-  4. Face parsing (BiSeNet)
+  4. Face parsing (buffalo_l built-in parsing head)
   5. Appearance extraction
 
 Outputs:
@@ -23,7 +23,7 @@ import cv2
 from modules.face_detection import FaceDetector, load_image
 from modules.face_landmarks import FaceLandmarkProcessor
 from modules.face_embeddings import FaceEmbedder
-from modules.face_parsing import FaceParser
+from modules.face_parsing import FaceParser   # <-- updated parser
 from modules.appearance_extraction import AppearanceExtractor
 
 
@@ -92,11 +92,11 @@ print("Embedding sample:", emb.embedding[:5])
 
 
 # -------------------------------------------------
-# 4. FACE PARSING (BiSeNet)
+# 4. FACE PARSING (buffalo_l parsing head)
 # -------------------------------------------------
 
 print("\n=== Face Parsing ===")
-parser = FaceParser(ctx_id=0)  # GPU BiSeNet
+parser = FaceParser(ctx_id=0)  # uses buffalo_l, no downloads
 parse = parser.parse(det.original_face)
 
 if parse is None:
