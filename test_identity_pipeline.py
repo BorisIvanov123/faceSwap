@@ -58,7 +58,7 @@ print(f"  Shape: {emb.embedding.shape}, Norm: {emb.norm:.2f}")
 
 # 4. FACE PARSING
 print("\n=== Face Parsing (BiSeNet) ===")
-parser = FaceParser(model_path="weights/resnet18.onnx", ctx_id=0)
+parser = FaceParser(model_path="weights/resnet34.onnx", ctx_id=0)
 parse = parser.parse(det.expanded_face)
 
 if parse is None:
