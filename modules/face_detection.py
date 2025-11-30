@@ -8,6 +8,7 @@ import numpy as np
 from dataclasses import dataclass
 from insightface.app import FaceAnalysis
 
+
 # ============================
 # CONFIG
 # ============================
@@ -27,7 +28,8 @@ class FaceDetectionResult:
     landmarks_2d: np.ndarray     # shape (106, 2)
     aligned_face: np.ndarray     # 112×112 aligned BGR
     original_face: np.ndarray    # tight crop
-    expanded_face: np.ndarray    # hair + full head crop
+    expanded_face: np.ndarray    # hair + forehead + chin crop
+    expanded_bbox: tuple         # (x1, y1, x2, y2) of expanded box
 
 
 # ============================
@@ -53,6 +55,7 @@ class FaceDetector:
         if img_bgr is None:
             raise ValueError("Input image is None.")
 
+        # Run RetinaFace detection + ArcFace alignment
         faces = self.app.get(img_bgr)
 
         if len(faces) == 0:
@@ -64,14 +67,14 @@ class FaceDetector:
         if best.det_score < min_score:
             return None
 
-        # Get aligned 112×112 crop
+        # 1. Aligned 112×112 ArcFace crop
         aligned = self._extract_aligned_face(img_bgr, best)
 
-        # Original tight crop
+        # 2. Original tight crop
         orig_crop = self._extract_bbox_crop(img_bgr, best.bbox)
 
-        # Expanded crop (landmark-aware)
-        expanded_crop = self._extract_expanded_crop(
+        # 3. Expanded head crop (hair/forehead/chin)
+        expanded_crop, expanded_bbox = self._extract_expanded_crop(
             img_bgr,
             best.bbox,
             best.landmark_2d_106
@@ -83,7 +86,8 @@ class FaceDetector:
             landmarks_2d=best.landmark_2d_106,
             aligned_face=aligned,
             original_face=orig_crop,
-            expanded_face=expanded_crop
+            expanded_face=expanded_crop,
+            expanded_bbox=expanded_bbox
         )
 
     # -----------------------------------
@@ -101,14 +105,16 @@ class FaceDetector:
     # -----------------------------------
 
     def _extract_expanded_crop(self, img, bbox, landmarks,
-                               side_expand_ratio=0.25,
-                               bottom_expand_ratio=0.20):
+                               side_expand_ratio=0.28,
+                               bottom_expand_ratio=0.25,
+                               forehead_scale=0.55):
         """
         Expand bbox using forehead height estimated from facial landmarks.
-        Much more reliable than a fixed top_expand percentage.
-
-        Uses eyebrow → chin distance to estimate how far upward we must expand
-        to capture the full hair region (works for kids too).
+        Uses correct InsightFace 106 indices:
+            - Left eyebrow: 52
+            - Right eyebrow: 55
+            - Chin: 103
+        This reliably captures hair for adults AND children.
         """
 
         h, w = img.shape[:2]
@@ -117,29 +123,30 @@ class FaceDetector:
         face_width = x2 - x1
         face_height = y2 - y1
 
-        # === 1. Choose landmark indices ===
-        # Approx landmarks from InsightFace 106 layout:
-        L_EYEBROW = 70
-        R_EYEBROW = 76
-        CHIN = 90
+        # === Correct landmark indices ===
+        L_EYEBROW = 52
+        R_EYEBROW = 55
+        CHIN = 103
 
-        # === 2. Eyebrow & chin centers ===
+        # === Eyebrow & chin centers ===
         eyebrow_y = int((landmarks[L_EYEBROW][1] + landmarks[R_EYEBROW][1]) / 2)
         chin_y = int(landmarks[CHIN][1])
 
-        # === 3. Forehead estimation ===
+        # === Forehead estimation (dynamic) ===
         eyebrow_to_chin = chin_y - eyebrow_y
-        forehead_height = int(eyebrow_to_chin * 0.60)  # Best universal ratio
+        forehead_height = int(eyebrow_to_chin * forehead_scale)
 
-        # === 4. Compute new expanded box ===
+        # === Expanded coordinates ===
         new_y1 = max(0, y1 - forehead_height)
-        new_y2 = min(h, int(y2 + face_height * bottom_expand_ratio))
+        new_y2 = min(h, y2 + int(face_height * bottom_expand_ratio))
 
         new_x1 = max(0, int(x1 - face_width * side_expand_ratio))
         new_x2 = min(w, int(x2 + face_width * side_expand_ratio))
 
-        # === 5. Crop ===
-        return img[new_y1:new_y2, new_x1:new_x2].copy()
+        expanded_bbox = (new_x1, new_y1, new_x2, new_y2)
+        crop = img[new_y1:new_y2, new_x1:new_x2].copy()
+
+        return crop, expanded_bbox
 
     # -----------------------------------
 
@@ -200,6 +207,7 @@ if __name__ == "__main__":
         print("✔ Face detected!")
         print("BBox:", result.bbox)
         print("Score:", result.detection_score)
+        print("Expanded BBox:", result.expanded_bbox)
 
         cv2.imwrite(OUTPUT, result.aligned_face)
         print("Saved:", OUTPUT)
