@@ -21,7 +21,14 @@ pip install -r requirements.txt
 
 ### 4. Download Models
 
+apt-get update && apt-get install -y unzip
+
 **Buffalo_L (InsightFace)** - Downloads automatically on first run.
+
+mkdir -p ~/.insightface/models
+cd ~/.insightface/models
+wget https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip
+unzip buffalo_l.zip
 
 **BiSeNet (Face Parsing):**
 ```bash

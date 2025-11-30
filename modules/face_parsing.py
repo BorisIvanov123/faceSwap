@@ -19,7 +19,7 @@ LABEL_MAP = {
 }
 
 HAIR_LABELS = [13]
-SKIN_LABELS = [1, 17]
+SKIN_LABELS = [1]  # Just skin, not neck
 EYE_LABELS = [4, 5]
 MOUTH_LABELS = [10, 11, 12]
 FACE_LABELS = [1, 2, 4, 5, 6, 7, 10, 11, 12]
@@ -80,10 +80,41 @@ class FaceParser:
         )
 
     def visualize_masks(self, result: FaceParsingResult, alpha: float = 0.5) -> np.ndarray:
+        """Visualize with distinct colors for each class."""
         img_bgr = cv2.cvtColor(result.processed_img, cv2.COLOR_RGB2BGR)
-        overlay = img_bgr.copy()
-        overlay[result.hair_mask > 0] = (0, 0, 255)
-        overlay[result.skin_mask > 0] = (0, 255, 0)
-        overlay[result.eye_mask > 0] = (255, 0, 0)
-        overlay[result.mouth_mask > 0] = (0, 255, 255)
+        
+        # Create colored segmentation map
+        colors = np.array([
+            [0, 0, 0],        # 0: background - black
+            [0, 255, 0],      # 1: skin - green
+            [255, 0, 255],    # 2: nose - magenta
+            [255, 255, 0],    # 3: eye_g - cyan
+            [255, 0, 0],      # 4: l_eye - blue
+            [255, 0, 0],      # 5: r_eye - blue
+            [0, 128, 0],      # 6: l_brow - dark green
+            [0, 128, 0],      # 7: r_brow - dark green
+            [0, 165, 255],    # 8: l_ear - orange
+            [0, 165, 255],    # 9: r_ear - orange
+            [0, 255, 255],    # 10: mouth - yellow
+            [0, 0, 255],      # 11: u_lip - red
+            [0, 0, 200],      # 12: l_lip - dark red
+            [128, 0, 128],    # 13: hair - PURPLE (distinct!)
+            [128, 128, 0],    # 14: hat - teal
+            [0, 215, 255],    # 15: earring - gold
+            [192, 192, 192],  # 16: necklace - silver
+            [140, 180, 210],  # 17: neck - tan
+            [100, 100, 100],  # 18: cloth - gray
+        ], dtype=np.uint8)
+        
+        overlay = colors[result.seg_map]
+        overlay = cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR)
+        
         return cv2.addWeighted(img_bgr, 1 - alpha, overlay, alpha, 0)
+    
+    def print_label_stats(self, result: FaceParsingResult):
+        """Print pixel counts for each label."""
+        print("\nLabel Statistics:")
+        for label in sorted(np.unique(result.seg_map)):
+            count = (result.seg_map == label).sum()
+            name = LABEL_MAP.get(label, '?')
+            print(f"  {label:2d} ({name:10s}): {count:,} pixels")
