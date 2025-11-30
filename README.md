@@ -1,10 +1,43 @@
+# FaceSwap Identity Pipeline
+
+## Quick Setup
+
+### 1. Create Virtual Environment
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip wheel setuptools
+```
 
+### 2. Install PyTorch (CUDA 11.8)
+```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
 
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
 
+### 4. Download Models
+
+**Buffalo_L (InsightFace)** - Downloads automatically on first run.
+
+**BiSeNet (Face Parsing):**
+```bash
+mkdir -p weights
+wget -O weights/resnet18.onnx https://github.com/yakhyo/face-parsing/releases/download/v0.0.1/resnet18.onnx
+```
+
+### 5. Run Pipeline
+```bash
+python test_identity_pipeline.py
+```
+
+## Requirements
+- Python 3.8+ until 3.10
+- CUDA 11.8 (for GPU)
+- ~500MB disk space for models
 
 
 This means you are now inside your AI environment and can run anything (diffusers, torch, IP-Adapter, ControlNet, etc.)

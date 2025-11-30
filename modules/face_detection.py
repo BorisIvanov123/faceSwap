@@ -27,6 +27,7 @@ class FaceDetectionResult:
     landmarks_2d: np.ndarray     # shape (106, 2)
     aligned_face: np.ndarray     # 112×112 aligned BGR
     original_face: np.ndarray    # original crop from the input image
+    expanded_face: np.ndarray    # expanded crop including hair for parsing
 
 
 # ============================
@@ -41,7 +42,7 @@ class FaceDetector:
         """
         self.app = FaceAnalysis(
             name=model_name,
-            providers=['CPUExecutionProvider']   # Force CPU (your ORT GPU is missing CUFFT)
+            providers=['CPUExecutionProvider']
         )
         self.app.prepare(ctx_id=ctx_id, det_size=det_size)
         self.det_size = det_size
@@ -63,18 +64,22 @@ class FaceDetector:
         if best.det_score < min_score:
             return None
 
-        # Get aligned 112×112 crop directly from InsightFace
-        aligned = self._extract_aligned_face(img_bgr, best)   # <-- correct aligned crop
+        # Get aligned 112×112 crop
+        aligned = self._extract_aligned_face(img_bgr, best)
 
-        # Original face crop
+        # Original tight face crop
         orig_crop = self._extract_bbox_crop(img_bgr, best.bbox)
+
+        # Expanded crop including hair region for parsing
+        expanded_crop = self._extract_expanded_crop(img_bgr, best.bbox)
 
         return FaceDetectionResult(
             bbox=best.bbox.astype(int),
             detection_score=best.det_score,
             landmarks_2d=best.landmark_2d_106,
             aligned_face=aligned,
-            original_face=orig_crop
+            original_face=orig_crop,
+            expanded_face=expanded_crop
         )
 
     # -----------------------------------
@@ -86,6 +91,34 @@ class FaceDetector:
         x2 = min(img.shape[1], x2)
         y2 = min(img.shape[0], y2)
         return img[y1:y2, x1:x2].copy()
+
+    # -----------------------------------
+
+    def _extract_expanded_crop(self, img, bbox, top_expand=0.8, side_expand=0.3, bottom_expand=0.15):
+        """
+        Expand bounding box to include hair and more context for parsing.
+
+        Args:
+            img: Full image
+            bbox: [x1, y1, x2, y2] face bounding box
+            top_expand: Expand upward (0.8 = 80% of face height) - for hair
+            side_expand: Expand sideways (0.3 = 30% of face width) - for ears/hair
+            bottom_expand: Expand downward (0.15 = 15% of face height) - for neck
+        """
+        x1, y1, x2, y2 = bbox.astype(int)
+        h, w = img.shape[:2]
+
+        face_width = x2 - x1
+        face_height = y2 - y1
+
+        # Expand bbox
+        new_x1 = max(0, int(x1 - face_width * side_expand))
+        new_x2 = min(w, int(x2 + face_width * side_expand))
+        new_y1 = max(0, int(y1 - face_height * top_expand))  # Expand UP for hair
+        new_y2 = min(h, int(y2 + face_height * bottom_expand))
+
+        return img[new_y1:new_y2, new_x1:new_x2].copy()
+
     # -----------------------------------
 
     def _extract_aligned_face(self, img, face_obj):
@@ -93,13 +126,10 @@ class FaceDetector:
         Reconstruct a proper 112x112 ArcFace-aligned face
         using 5-point alignment derived from InsightFace 106 landmarks.
         """
-
-        # 5 key landmarks from the 106 set
         lm5 = face_obj.landmark_2d_106[
             [33, 46, 60, 72, 76], :
         ].astype(np.float32)
 
-        # ArcFace's fixed 5 reference points
         ref5 = np.array([
             [38.2946, 51.6963],
             [73.5318, 51.5014],
@@ -108,14 +138,10 @@ class FaceDetector:
             [70.7299, 92.2041],
         ], dtype=np.float32)
 
-        # Compute affine transform
         M, _ = cv2.estimateAffinePartial2D(lm5, ref5, method=cv2.LMEDS)
-
-        # Warp to 112×112
         aligned = cv2.warpAffine(img, M, (112, 112), borderValue=0)
 
         return aligned
-
 
 
 # ============================
