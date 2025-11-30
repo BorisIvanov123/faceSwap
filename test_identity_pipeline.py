@@ -1,6 +1,7 @@
 """
 test_identity_pipeline.py - Full identity pipeline with debug outputs
 """
+
 import os
 import cv2
 import numpy as np
@@ -22,10 +23,7 @@ img = load_image(IMG_PATH)
 print(f"Loaded: {IMG_PATH}, shape={img.shape}")
 
 
-# ==========================================================
 # 1. FACE DETECTION
-# ==========================================================
-
 print("\n=== Face Detection ===")
 detector = FaceDetector(ctx_id=0)
 det = detector.detect_faces(img)
@@ -35,7 +33,6 @@ if det is None:
 
 print(f"✔ Face detected (score: {det.detection_score:.3f})")
 print(f"  BBox: {det.bbox}")
-print(f"  Expanded BBox: {det.expanded_bbox}")
 print(f"  Original crop: {det.original_face.shape}")
 print(f"  Expanded crop: {det.expanded_face.shape}")
 
@@ -45,55 +42,21 @@ cv2.imwrite(f"{OUT_DIR}/1_expanded_face.png", det.expanded_face)
 print("  Saved: aligned, original, expanded crops")
 
 
-# --- NEW: Save expanded bbox coordinates ---
-with open(f"{OUT_DIR}/expanded_bbox.txt", "w") as f:
-    f.write(f"Expanded BBox: {det.expanded_bbox}\n")
-
-
-# --- NEW: Visualize both bboxes (original + expanded) on the image ---
-dbg = img.copy()
-x1, y1, x2, y2 = det.bbox
-ex1, ey1, ex2, ey2 = det.expanded_bbox
-
-# original bbox = GREEN
-cv2.rectangle(dbg, (x1, y1), (x2, y2), (0, 255, 0), 3)
-
-# expanded bbox = RED
-cv2.rectangle(dbg, (ex1, ey1), (ex2, ey2), (0, 0, 255), 3)
-
-cv2.imwrite(f"{OUT_DIR}/1_bbox_debug.png", dbg)
-print("  Saved: bbox debug visualization")
-
-
-# ==========================================================
 # 2. LANDMARKS
-# ==========================================================
-
 print("\n=== Landmark Processing ===")
 lm_proc = FaceLandmarkProcessor()
 lm = lm_proc.process(det)
 print(f"  Landmarks: {lm.landmarks.shape}, Roll: {lm.roll_angle:.1f}°")
 
-# --- NEW: Draw landmarks on the original image ---
-landmark_debug = lm_proc.draw_landmarks(img, lm.landmarks)
-cv2.imwrite(f"{OUT_DIR}/2_landmarks_debug.png", landmark_debug)
-print("  Saved: landmarks debug")
 
-
-# ==========================================================
 # 3. EMBEDDINGS
-# ==========================================================
-
 print("\n=== ArcFace Embedding ===")
 embedder = FaceEmbedder(ctx_id=0)
 emb = embedder.compute_embedding(det.aligned_face)
 print(f"  Shape: {emb.embedding.shape}, Norm: {emb.norm:.2f}")
 
 
-# ==========================================================
-# 4. FACE PARSING (BiSeNet)
-# ==========================================================
-
+# 4. FACE PARSING
 print("\n=== Face Parsing (BiSeNet) ===")
 parser = FaceParser(model_path="weights/resnet18.onnx", ctx_id=0)
 parse = parser.parse(det.expanded_face)
@@ -104,21 +67,16 @@ if parse is None:
 print(f"  Seg map: {parse.seg_map.shape}")
 print(f"  Unique labels: {np.unique(parse.seg_map)}")
 
-
-# --- Print detailed breakdown ---
+# Print detailed label statistics
 print("\n  Label breakdown:")
 for label in sorted(np.unique(parse.seg_map)):
     count = (parse.seg_map == label).sum()
     name = LABEL_MAP.get(label, '?')
     print(f"    {label:2d} ({name:10s}): {count:,} pixels")
 
-
-# --- Save parsing overlay ---
 overlay = parser.visualize_masks(parse)
 cv2.imwrite(f"{OUT_DIR}/4_parsing_overlay.png", overlay)
 
-
-# --- Save individual masks ---
 masks_info = [
     ('hair', parse.hair_mask),
     ('skin', parse.skin_mask),
@@ -130,18 +88,14 @@ print("\n  Mask pixel counts:")
 for name, mask in masks_info:
     pixel_count = (mask > 0).sum()
     print(f"    {name}: {pixel_count:,} pixels")
-
     cv2.imwrite(f"{OUT_DIR}/4_mask_{name}.png", mask)
-
+    
     masked_region = cv2.cvtColor(parse.processed_img, cv2.COLOR_RGB2BGR).copy()
     masked_region[mask == 0] = 0
     cv2.imwrite(f"{OUT_DIR}/4_masked_{name}.png", masked_region)
 
 
-# ==========================================================
-# 5. APPEARANCE EXTRACTION
-# ==========================================================
-
+# 5. APPEARANCE
 print("\n=== Appearance Extraction ===")
 extractor = AppearanceExtractor()
 appearance = extractor.extract(parse)
