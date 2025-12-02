@@ -85,8 +85,8 @@ class FaceLandmarkProcessor:
 
         Uses indices from InsightFace's 106-landmark layout.
         """
-        left_eye_idx = 33
-        right_eye_idx = 46
+        left_eye_idx = 60
+        right_eye_idx = 70
 
         left = landmarks[left_eye_idx]
         right = landmarks[right_eye_idx]

@@ -1,5 +1,5 @@
 """
-test_identity_pipeline.py - Full identity pipeline with debug outputs
+test_identity_pipeline.py - Full identity pipeline with SegFace parsing
 """
 
 import os
@@ -9,7 +9,7 @@ import numpy as np
 from modules.face_detection import FaceDetector, load_image
 from modules.face_landmarks import FaceLandmarkProcessor
 from modules.face_embeddings import FaceEmbedder
-from modules.face_parsing import FaceParser, LABEL_MAP
+from modules.face_parsing_segface import FaceParserSegFace, SEGFACE_LABELS
 from modules.appearance_extraction import AppearanceExtractor
 
 
@@ -56,9 +56,13 @@ emb = embedder.compute_embedding(det.aligned_face)
 print(f"  Shape: {emb.embedding.shape}, Norm: {emb.norm:.2f}")
 
 
-# 4. FACE PARSING
-print("\n=== Face Parsing (BiSeNet) ===")
-parser = FaceParser(model_path="weights/resnet34.onnx", ctx_id=0)
+# 4. FACE PARSING (SegFace)
+print("\n=== Face Parsing (SegFace) ===")
+parser = FaceParserSegFace(
+    model_path="SegFace/weights/mobilenet_celeba_512/model_299.pt",
+    backbone="mobilenet",
+    input_resolution=512
+)
 parse = parser.parse(det.expanded_face)
 
 if parse is None:
@@ -71,11 +75,15 @@ print(f"  Unique labels: {np.unique(parse.seg_map)}")
 print("\n  Label breakdown:")
 for label in sorted(np.unique(parse.seg_map)):
     count = (parse.seg_map == label).sum()
-    name = LABEL_MAP.get(label, '?')
+    name = SEGFACE_LABELS.get(label, '?')
     print(f"    {label:2d} ({name:10s}): {count:,} pixels")
 
+# Save visualizations
 overlay = parser.visualize_masks(parse)
 cv2.imwrite(f"{OUT_DIR}/4_parsing_overlay.png", overlay)
+
+all_labels = parser.visualize_all_labels(parse)
+cv2.imwrite(f"{OUT_DIR}/4_all_labels.png", all_labels)
 
 masks_info = [
     ('hair', parse.hair_mask),
@@ -114,5 +122,5 @@ print(f"  Eyes:  RGB{appearance.eye_color_rgb} → {appearance.eye_color_name}")
 print("="*45)
 
 print(f"\n✅ All stages successful!")
-print(f"   Check {OUT_DIR}/4_parsing_overlay.png")
+print(f"   Check {OUT_DIR}/4_all_labels.png for full segmentation")
 print(f"   Hair=PURPLE, Skin=GREEN, Eyes=BLUE, Mouth=YELLOW")
