@@ -36,6 +36,17 @@ mkdir -p weights
 wget -O weights/resnet18.onnx https://github.com/yakhyo/face-parsing/releases/download/v0.0.1/resnet18.onnx
 ```
 
+# Clone SegFace
+cd /workspace/faceSwap
+git clone https://github.com/Kartik-3004/SegFace.git
+
+# Download weights
+pip install huggingface_hub
+python -c "
+from huggingface_hub import hf_hub_download
+hf_hub_download(repo_id='kartiknarayan/SegFace', filename='mobilenet_celeba_512/model_299.pt', local_dir='SegFace/weights')
+"
+
 ### 5. Run Pipeline
 ```bash
 python test_identity_pipeline.py
