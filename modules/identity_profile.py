@@ -1,5 +1,8 @@
-from dataclasses import dataclass
+import os
+import json
 import numpy as np
+import cv2
+from dataclasses import dataclass, asdict
 
 
 @dataclass
@@ -104,3 +107,55 @@ def build_identity_profile(det, lm, emb, parse, appearance, debug_paths=None):
     )
 
     return profile
+
+
+def save_profile(profile: IdentityProfile, output_dir: str):
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "masks"), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "crops"), exist_ok=True)
+
+    # Save embedding
+    np.save(os.path.join(output_dir, "embedding.npy"), profile.embedding)
+
+    # Save crops
+    cv2.imwrite(os.path.join(output_dir, "crops", "aligned_face.png"), profile.aligned_face)
+    cv2.imwrite(os.path.join(output_dir, "crops", "expanded_face.png"), profile.expanded_face)
+    cv2.imwrite(os.path.join(output_dir, "crops", "original_face.png"), profile.original_face)
+
+    # Save masks
+    mask_dict = {
+        "face.png": profile.mask_face,
+        "skin.png": profile.mask_skin,
+        "hair.png": profile.mask_hair,
+        "eye.png": profile.mask_eye,
+        "mouth.png": profile.mask_mouth,
+    }
+
+    for name, mask in mask_dict.items():
+        cv2.imwrite(os.path.join(output_dir, "masks", name), mask)
+
+    # Save metadata JSON
+    json_data = {
+        "embedding_norm": profile.embedding_norm,
+        "appearance": {
+            "hair_hex": profile.hair_color_hex,
+            "hair_shade": profile.hair_shade,
+            "skin_rgb": profile.skin_color_rgb,
+            "skin_tone": profile.skin_tone,
+            "eye_rgb": profile.eye_color_rgb,
+            "eye_color": profile.eye_color_name,
+        },
+        "pixel_stats": profile.pixel_stats,
+        "roll_angle": profile.roll_angle,
+        "debug_paths": profile.debug_paths,
+        "shape_info": {
+            "aligned_face": profile.aligned_face.shape,
+            "expanded_face": profile.expanded_face.shape,
+            "original_face": profile.original_face.shape,
+        }
+    }
+
+    with open(os.path.join(output_dir, "identity_profile.json"), "w") as f:
+        json.dump(json_data, f, indent=4)
+
+    print(f"✔ Identity profile saved to: {output_dir}")

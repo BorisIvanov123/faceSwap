@@ -11,7 +11,7 @@ from modules.face_landmarks import FaceLandmarkProcessor
 from modules.face_embeddings import FaceEmbedder
 from modules.face_parsing_segface import FaceParserSegFace, SEGFACE_LABELS
 from modules.appearance_extraction import AppearanceExtractor
-from modules.identity_profile import build_identity_profile
+from modules.identity_profile import build_identity_profile, save_profile
 
 
 IMG_PATH = "photos/faces/lape.jpg"
@@ -143,3 +143,8 @@ profile = build_identity_profile(
 )
 
 print("✔ Identity profile constructed!")
+
+IDENTITY_OUT = os.path.join(OUT_DIR, "identity_profile")
+save_profile(profile, IDENTITY_OUT)
+
+print("✔ Identity profile saved for debugging!")
