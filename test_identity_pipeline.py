@@ -14,7 +14,7 @@ from modules.appearance_extraction import AppearanceExtractor
 from modules.identity_profile import build_identity_profile
 
 
-IMG_PATH = "photos/faces/test.jpg"
+IMG_PATH = "photos/faces/lape.jpg"
 OUT_DIR = "debug_output"
 
 os.makedirs(OUT_DIR, exist_ok=True)
