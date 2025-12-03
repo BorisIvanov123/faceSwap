@@ -18,7 +18,7 @@ from modules.prompt_generator import generate_prompt, generate_negative
 
 IMG_PATH = "photos/faces/lape.jpg"
 OUT_DIR = "debug_output"
-TEMPLATE_PAGE = "photos/templates/page_01.png"
+TEMPLATE_PAGE = "photos/templates/1.png"
 FACE_REGIONS_JSON = "templates/face_regions.json"
 
 
