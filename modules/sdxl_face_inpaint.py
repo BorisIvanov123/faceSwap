@@ -21,7 +21,7 @@ class SDXLFaceInpainter:
 
     def __init__(self,
                  device="cuda",
-                 model_name="stabilityai/sdxl-Inpainting",
+                 model_name="diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
                  ipadapter_repo="h94/IP-Adapter-FaceID",
                  controlnet_lineart="diffusers/controlnet-sdxl-1.0-lineart",
                  controlnet_depth="diffusers/controlnet-sdxl-1.0-depth"):
