@@ -11,6 +11,7 @@ from modules.face_landmarks import FaceLandmarkProcessor
 from modules.face_embeddings import FaceEmbedder
 from modules.face_parsing_segface import FaceParserSegFace, SEGFACE_LABELS
 from modules.appearance_extraction import AppearanceExtractor
+from modules.identity_profile import build_identity_profile
 
 
 IMG_PATH = "photos/faces/test.jpg"
@@ -124,3 +125,21 @@ print("="*45)
 print(f"\n✅ All stages successful!")
 print(f"   Check {OUT_DIR}/4_all_labels.png for full segmentation")
 print(f"   Hair=PURPLE, Skin=GREEN, Eyes=BLUE, Mouth=YELLOW")
+
+# 6. BUILD IDENTITY PROFILE
+print("\n=== Building Identity Profile ===")
+profile = build_identity_profile(
+    det=det,
+    lm=lm,
+    emb=emb,
+    parse=parse,
+    appearance=appearance,
+    debug_paths={
+        "aligned_face": f"{OUT_DIR}/1_aligned_face.png",
+        "expanded_face": f"{OUT_DIR}/1_expanded_face.png",
+        "parsing_overlay": f"{OUT_DIR}/4_parsing_overlay.png",
+        "all_labels": f"{OUT_DIR}/4_all_labels.png",
+    }
+)
+
+print("✔ Identity profile constructed!")
