@@ -12,10 +12,15 @@ from modules.face_embeddings import FaceEmbedder
 from modules.face_parsing_segface import FaceParserSegFace, SEGFACE_LABELS
 from modules.appearance_extraction import AppearanceExtractor
 from modules.identity_profile import build_identity_profile, save_profile
+from modules.sdxl_face_inpaint import SDXLFaceInpainter
+from modules.prompt_generator import generate_prompt, generate_negative
 
 
 IMG_PATH = "photos/faces/lape.jpg"
 OUT_DIR = "debug_output"
+TEMPLATE_PAGE = "photos/templates/page_01.png"
+FACE_REGIONS_JSON = "templates/face_regions.json"
+
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -148,3 +153,52 @@ IDENTITY_OUT = os.path.join(OUT_DIR, "identity_profile")
 save_profile(profile, IDENTITY_OUT)
 
 print("✔ Identity profile saved for debugging!")
+
+# 6 SDXL FACE INPAINTING WITH IDENTITY
+
+
+print("\n=== Loading Template Page ===")
+page_img = load_image(TEMPLATE_PAGE)
+print(f"Loaded template page: {TEMPLATE_PAGE}, shape={page_img.shape}")
+
+# Load the annotated face region for this page
+import json
+with open(FACE_REGIONS_JSON, "r") as f:
+    FACE_REGIONS = json.load(f)
+
+page_name = os.path.basename(TEMPLATE_PAGE)
+if page_name not in FACE_REGIONS:
+    raise RuntimeError(f"❌ No face region found for {page_name} in {FACE_REGIONS_JSON}")
+
+x1, y1, x2, y2 = FACE_REGIONS[page_name]
+print(f"Face region for inpainting: {x1, y1, x2, y2}")
+
+# Create the inpainting mask
+mask = np.zeros(page_img.shape[:2], dtype=np.uint8)
+mask[y1:y2, x1:x2] = 255
+cv2.imwrite(f"{OUT_DIR}/7_inpaint_mask.png", mask)
+print("✔ Mask saved for debugging")
+
+# Generate prompt based on profile appearance
+prompt = generate_prompt(profile, page_context="children's Christmas storybook scene")
+negative = generate_negative()
+
+print("\n=== Running SDXL Face Inpainting ===")
+
+inpainter = SDXLFaceInpainter(device="cuda")
+
+result = inpainter.inpaint(
+    template_img=page_img,
+    mask=mask,
+    profile=profile,
+    prompt=prompt,
+    negative_prompt=negative,
+    strength=0.22,
+    steps=30
+)
+
+# Save output
+out_path = f"{OUT_DIR}/8_sdxl_result.png"
+cv2.imwrite(out_path, result)
+print(f"✔ SDXL inpainting complete!")
+print(f"Result saved to {out_path}")
