@@ -1,19 +1,20 @@
+"""
+SDXL Face Inpainting with IP-Adapter for identity preservation
+"""
+
 import torch
 import numpy as np
-from diffusers import StableDiffusionXLInpaintPipeline, ControlNetModel, AutoencoderKL
+from diffusers import StableDiffusionXLInpaintPipeline, AutoencoderKL
 from PIL import Image
 import cv2
-import os
 
 
 def load_image_for_sdxl(img):
-    """Convert BGR NumPy to PIL RGB, or pass-through if already PIL."""
+    """Convert BGR NumPy to PIL RGB."""
     if isinstance(img, Image.Image):
         return img
-
     if isinstance(img, np.ndarray):
         return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-
     raise TypeError("Unsupported image type for SDXL.")
 
 
@@ -23,18 +24,11 @@ class SDXLFaceInpainter:
                  device="cuda",
                  model_name="diffusers/stable-diffusion-xl-1.0-inpainting-0.1"):
         """
-        Full SDXL inpainting stack:
-        - SDXL inpaint model
-        - IP-Adapter FaceID for identity preservation
-        - ControlNet LineArt + Depth for structure
-        - Optional VAE fix for detail
+        SDXL inpainting with IP-Adapter Plus Face for identity preservation.
         """
-
         self.device = device
 
-        # ---------------------------------------------------------------
         # Load SDXL inpainting model
-        # ---------------------------------------------------------------
         print("\n=== Loading SDXL Inpainting ===")
         self.pipe = StableDiffusionXLInpaintPipeline.from_pretrained(
             model_name,
@@ -43,120 +37,82 @@ class SDXLFaceInpainter:
         ).to(device)
         print("✔ SDXL Inpainting loaded")
 
-        # ---------------------------------------------------------------
-        # Load IP-Adapter FaceID (SDXL version)
-        # ---------------------------------------------------------------
-        print("\n=== Loading IP-Adapter FaceID (SDXL) ===")
+        # Load IP-Adapter Plus Face (publicly available, no auth needed)
+        print("\n=== Loading IP-Adapter Plus Face ===")
         self.pipe.load_ip_adapter(
-            "h94/IP-Adapter-FaceID-SDXL",
-            subfolder="models",
-            weight_name="ip-adapter-faceid_sdxl.bin"
+            "h94/IP-Adapter",
+            subfolder="sdxl_models",
+            weight_name="ip-adapter-plus-face_sdxl_vit-h.safetensors"
         )
-        print("✔ IP-Adapter FaceID SDXL loaded")
+        self.pipe.set_ip_adapter_scale(0.6)
+        print("✔ IP-Adapter Plus Face loaded")
 
-        # ---------------------------------------------------------------
-        # LineArt + Depth ControlNet
-        # ---------------------------------------------------------------
-        print("\n=== Loading ControlNet-LineArt & Depth ===")
-
-        self.control_lineart = ControlNetModel.from_pretrained(
-            "diffusers/controlnet-sdxl-1.0-lineart",
-            torch_dtype=torch.float16,
-            variant="fp16"
-        ).to(device)
-
-        self.control_depth = ControlNetModel.from_pretrained(
-            "diffusers/controlnet-sdxl-1.0-depth",
-            torch_dtype=torch.float16,
-            variant="fp16"
-        ).to(device)
-
-        self.pipe.controlnet = [self.control_lineart, self.control_depth]
-
-        print("✔ ControlNet models loaded")
-
-        # ---------------------------------------------------------------
-        # High-quality VAE (optional but improves face detail)
-        # ---------------------------------------------------------------
+        # High-quality VAE
+        print("\n=== Loading VAE ===")
         self.vae = AutoencoderKL.from_pretrained(
             "madebyollin/sdxl-vae-fp16-fix",
             torch_dtype=torch.float16
         ).to(device)
-
         self.pipe.vae = self.vae
+        print("✔ VAE loaded")
 
         print("\n=== SDXL Face Inpainter Ready ===")
 
-    # ============================================================
-    # Mask preparation
-    # ============================================================
     def prepare_mask(self, mask):
-        """
-        SDXL expects an RGB mask where white (255) = inpaint area.
-        """
+        """Convert mask to PIL RGB."""
         if isinstance(mask, np.ndarray):
             if len(mask.shape) == 2:
                 mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2RGB)
             return Image.fromarray(mask)
         return mask
 
-    # ============================================================
-    # Preprocessing for ControlNet (lineart + depth)
-    # ============================================================
-    def preprocessing(self, template_img, mask):
-
-        # Convert to PIL
-        pil_image = load_image_for_sdxl(template_img)
-        pil_mask = self.prepare_mask(mask)
-
-        # ControlNet preprocessors
-        img_np = np.array(pil_image)
-
-        # LineArt edges
-        img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        edges = cv2.Canny(img_gray, 80, 120)
-
-        # Simple depth proxy (you can replace with MiDaS later)
-        depth = img_gray
-
-        control_lineart = Image.fromarray(edges)
-        control_depth = Image.fromarray(depth)
-
-        return pil_image, pil_mask, control_lineart, control_depth
-
-    # ============================================================
-    # Main inpainting function
-    # ============================================================
     def inpaint(self,
                 template_img,
                 mask,
                 profile,
                 prompt="",
                 negative_prompt="",
-                strength=0.22,
-                steps=25):
-
+                strength=0.85,
+                steps=30):
+        """
+        Run SDXL inpainting with IP-Adapter face guidance.
+        
+        Args:
+            template_img: BGR numpy array or PIL Image
+            mask: Binary mask (255 = inpaint area)
+            profile: Identity profile with face_crop
+            prompt: Text prompt
+            negative_prompt: Negative prompt
+            strength: Inpainting strength (0.0-1.0)
+            steps: Number of inference steps
+        """
         # Prepare images
-        image, mask_image, lineart_cn, depth_cn = self.preprocessing(template_img, mask)
+        image = load_image_for_sdxl(template_img)
+        mask_image = self.prepare_mask(mask)
+        
+        # Get face image for IP-Adapter
+        face_img = profile.face_crop  # BGR numpy
+        face_pil = load_image_for_sdxl(face_img)
+        
+        # Resize to expected size
+        image = image.resize((1024, 1024))
+        mask_image = mask_image.resize((1024, 1024))
+        face_pil = face_pil.resize((224, 224))
 
-        # Identity embedding (ArcFace -> IPAdapter)
-        identity_emb = torch.tensor(profile.embedding, dtype=torch.float16).unsqueeze(0).to(self.device)
-
-        # -----------------------------------------------------------
-        # Run SDXL Inpaint + IP-Adapter
-        # -----------------------------------------------------------
+        # Run inpainting with IP-Adapter
         result = self.pipe(
             prompt=prompt,
             negative_prompt=negative_prompt,
             image=image,
             mask_image=mask_image,
-            controlnet_hint=[lineart_cn, depth_cn],
-            controlnet_conditioning_scale=[0.8, 0.6],  # lineart, depth
-            ip_adapter_faceid_emb=identity_emb,
+            ip_adapter_image=face_pil,
             strength=strength,
             num_inference_steps=steps,
-            guidance_scale=5.0,
-        )
+            guidance_scale=7.5,
+        ).images[0]
 
-        final = result.images[0]
-        return cv2.cvtColor(np.array(final), cv2.COLOR_RGB2BGR)
+        # Resize back to original size
+        orig_h, orig_w = template_img.shape[:2] if isinstance(template_img, np.ndarray) else template_img.size[::-1]
+        result = result.resize((orig_w, orig_h))
+        
+        return cv2.cvtColor(np.array(result), cv2.COLOR_RGB2BGR)

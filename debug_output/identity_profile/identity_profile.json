@@ -1,0 +1,48 @@
+{
+    "embedding_norm": 23.543962478637695,
+    "appearance": {
+        "hair_hex": "#73564D",
+        "hair_shade": "red",
+        "skin_rgb": [
+            149,
+            90,
+            69
+        ],
+        "skin_tone": "tan",
+        "eye_rgb": [
+            40,
+            29,
+            24
+        ],
+        "eye_color": "brown"
+    },
+    "pixel_stats": {
+        "hair": 3587,
+        "skin": 32115,
+        "eye": 101
+    },
+    "roll_angle": -41.00559685652246,
+    "debug_paths": {
+        "aligned_face": "debug_output/1_aligned_face.png",
+        "expanded_face": "debug_output/1_expanded_face.png",
+        "parsing_overlay": "debug_output/4_parsing_overlay.png",
+        "all_labels": "debug_output/4_all_labels.png"
+    },
+    "shape_info": {
+        "aligned_face": [
+            112,
+            112,
+            3
+        ],
+        "expanded_face": [
+            310,
+            284,
+            3
+        ],
+        "original_face": [
+            237,
+            177,
+            3
+        ]
+    }
+}
