@@ -193,7 +193,7 @@ result = inpainter.inpaint(
     profile=profile,
     prompt=prompt,
     negative_prompt=negative,
-    strength=0.22,
+    strength=0.95,
     steps=30
 )
 
